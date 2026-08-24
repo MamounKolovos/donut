@@ -12,7 +12,7 @@ const scroll_sentinel_id = "scroll-sentinel"
 const server_url = "wss://echo.websocket.org"
 
 pub type Model {
-  Model(connection: ConnectionState, history: List(HistoryEntry))
+  Model(connection: ConnectionState, history: List(HistoryEntry), draft: String)
 }
 
 pub type HistoryEntry {
@@ -33,10 +33,11 @@ pub type Message {
   UserRequestedSend(message: donut.WebsocketMessage)
   UserRequestedConnect
   UserRequestedDisconnect
+  UserUpdatedMessageBox(content: String)
 }
 
 pub fn init(_args: Nil) -> #(Model, Effect(Message)) {
-  let model = Model(connection: Connecting, history: [])
+  let model = Model(connection: Connecting, history: [], draft: "")
   let effect = donut.init(server_url, ReceivedEvent)
   #(model, effect)
 }
@@ -93,6 +94,9 @@ pub fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
     Model(connection: Connected(handle:), ..), UserRequestedDisconnect -> {
       #(Model(..model, connection: Disconnecting), donut.close(handle))
     }
+    model, UserUpdatedMessageBox(content:) -> {
+      #(Model(..model, draft: content), effect.none())
+    }
     model, _ -> #(model, effect.none())
   }
 }
@@ -139,7 +143,7 @@ pub fn view(model: Model) -> Element(Message) {
         ],
       ),
       html.div([attribute.class("w-full max-w-md pb-6 px-4")], [
-        message_box_view(model.connection),
+        message_box_view(model.draft, model.connection),
       ]),
     ],
   )
@@ -188,7 +192,17 @@ fn history_view(history: List(HistoryEntry)) -> Element(Message) {
   )
 }
 
-fn message_box_view(connection: ConnectionState) -> Element(Message) {
+fn message_box_view(
+  draft: String,
+  connection: ConnectionState,
+) -> Element(Message) {
+  let submit_disabled =
+    draft == ""
+    || case connection {
+      Connected(_) -> False
+      _ -> True
+    }
+
   let form =
     html.form(
       [
@@ -202,6 +216,8 @@ fn message_box_view(connection: ConnectionState) -> Element(Message) {
         html.input([
           attribute.type_("text"),
           attribute.name("message-box"),
+          attribute.value(draft),
+          event.on_input(UserUpdatedMessageBox),
           attribute.placeholder("Type a message..."),
           attribute.class(
             "flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
@@ -210,10 +226,7 @@ fn message_box_view(connection: ConnectionState) -> Element(Message) {
         html.button(
           [
             attribute.type_("submit"),
-            attribute.disabled(case connection {
-              Connected(_) -> False
-              _ -> True
-            }),
+            attribute.disabled(submit_disabled),
             attribute.class(button_classes),
           ],
           [html.text("Send")],
