@@ -18,6 +18,7 @@ pub type WebsocketMessage {
 }
 
 pub type CloseCode {
+  /// Code 1000: the purpose of the connection was fulfilled
   Normal
   GoingAway
   ProtocolError
@@ -30,6 +31,8 @@ pub type CloseCode {
   FailedExtensionNegotiation
   UnexpectedFailure
   FailedTLSHandshake
+  /// Code 3000-4999: application specific code  
+  ApplicationCode(code: Int)
   OtherCloseReason
 }
 
@@ -47,11 +50,15 @@ fn to_code(code: Int) -> CloseCode {
     1010 -> FailedExtensionNegotiation
     1011 -> UnexpectedFailure
     1015 -> FailedTLSHandshake
+    code if code >= 3000 && code < 5000 -> ApplicationCode(code)
     _ -> OtherCloseReason
   }
 }
 
-pub fn init(url url: String, to_msg to_msg: fn(Event) -> msg) -> Effect(msg) {
+pub fn init(
+  url url: String,
+  to_message to_message: fn(Event) -> msg,
+) -> Effect(msg) {
   use dispatch <- effect.from
 
   let result =
@@ -59,29 +66,29 @@ pub fn init(url url: String, to_msg to_msg: fn(Event) -> msg) -> Effect(msg) {
       url:,
       on_open: fn(id) {
         let event = Opened(handle: Handle(id:))
-        to_msg(event) |> dispatch
+        to_message(event) |> dispatch
       },
       on_text: fn(id, data) {
         let event = ReceivedMessage(handle: Handle(id:), message: Text(data:))
-        to_msg(event) |> dispatch
+        to_message(event) |> dispatch
       },
       on_binary: fn(id, data) {
         let event = ReceivedMessage(handle: Handle(id:), message: Binary(data:))
-        to_msg(event) |> dispatch
+        to_message(event) |> dispatch
       },
       on_error: fn(id) {
         let event = Errored(handle: Handle(id:))
-        to_msg(event) |> dispatch
+        to_message(event) |> dispatch
       },
       on_close: fn(id, code) {
         let event = Closed(handle: Handle(id:), code: to_code(code))
-        to_msg(event) |> dispatch
+        to_message(event) |> dispatch
       },
     )
 
   case result {
     Ok(Nil) -> Nil
-    Error(Nil) -> to_msg(FailedToInitialize) |> dispatch
+    Error(Nil) -> to_message(FailedToInitialize) |> dispatch
   }
 }
 
@@ -118,3 +125,9 @@ pub fn close(handle: Handle) -> Effect(msg) {
 
 @external(javascript, "./donut_ffi.mjs", "close")
 fn do_close(id: Int) -> Nil
+
+// Testing
+
+pub fn test_handle(id: Int) -> Handle {
+  Handle(id:)
+}
