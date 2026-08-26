@@ -34,7 +34,7 @@ pub type Message {
   UserRequestedSend(message: donut.WebsocketMessage)
   UserRequestedConnect
   UserRequestedDisconnect
-  UserUpdatedMessageBox(content: String)
+  UserUpdatedDraft(draft: String)
   UserRequestedClearHistory
 }
 
@@ -114,8 +114,8 @@ pub fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
     Model(connection: Connected(handle:), ..), UserRequestedDisconnect -> {
       #(Model(..model, connection: Disconnecting(handle:)), donut.close(handle))
     }
-    model, UserUpdatedMessageBox(content:) -> {
-      #(Model(..model, draft: content), effect.none())
+    model, UserUpdatedDraft(draft:) -> {
+      #(Model(..model, draft:), effect.none())
     }
     model, UserRequestedClearHistory -> {
       #(Model(..model, history: []), effect.none())
@@ -238,9 +238,9 @@ fn message_box_view(
       [
         html.input([
           attribute.type_("text"),
-          attribute.name("message-box"),
+          attribute.name("draft-input"),
           attribute.value(draft),
-          event.on_input(UserUpdatedMessageBox),
+          event.on_input(UserUpdatedDraft),
           attribute.placeholder("Type a message..."),
           attribute.class(
             "flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500",
