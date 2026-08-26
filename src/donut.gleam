@@ -1,3 +1,4 @@
+import lustre/dev/simulate.{type Simulation}
 import lustre/effect.{type Effect}
 
 pub type Event {
@@ -128,6 +129,9 @@ fn do_close(id: Int) -> Nil
 
 // Testing
 
-pub fn test_handle(id: Int) -> Handle {
+pub fn test_handle(
+  for _simulation: Simulation(model, message),
+  using id: Int,
+) -> Handle {
   Handle(id:)
 }

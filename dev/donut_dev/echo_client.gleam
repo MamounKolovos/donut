@@ -5,6 +5,7 @@ import lustre/attribute
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
+import lustre/element/svg
 import lustre/event
 
 const scroll_sentinel_id = "scroll-sentinel"
@@ -24,7 +25,7 @@ pub type ConnectionState {
   Disconnected
   Connecting
   Connected(handle: donut.Handle)
-  Disconnecting
+  Disconnecting(handle: donut.Handle)
   Faulted
 }
 
@@ -34,6 +35,7 @@ pub type Message {
   UserRequestedConnect
   UserRequestedDisconnect
   UserUpdatedMessageBox(content: String)
+  UserRequestedClearHistory
 }
 
 pub fn init(_args: Nil) -> #(Model, Effect(Message)) {
@@ -43,25 +45,37 @@ pub fn init(_args: Nil) -> #(Model, Effect(Message)) {
 }
 
 pub fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
-  echo message
   case model, message {
-    model, ReceivedEvent(event:) ->
-      case event {
-        donut.FailedToInitialize -> {
-          #(Model(..model, connection: Faulted), effect.none())
-        }
-        donut.Opened(handle:) -> {
-          #(Model(..model, connection: Connected(handle:)), effect.none())
-        }
-        donut.ReceivedMessage(handle: _, message:) -> {
-          let entry = Received(websocket_message_to_string(message))
-          let history = [entry, ..model.history]
-          #(Model(..model, history:), scroll_to_bottom_of_history())
-        }
-        donut.Errored(handle: _) -> {
-          #(Model(..model, connection: Faulted), effect.none())
-        }
-        donut.Closed(handle: _, code:) ->
+    Model(connection: Connecting, ..),
+      ReceivedEvent(event: donut.FailedToInitialize)
+    -> {
+      #(Model(..model, connection: Faulted), effect.none())
+    }
+    Model(connection: Connecting, ..),
+      ReceivedEvent(event: donut.Opened(handle:))
+    -> {
+      #(Model(..model, connection: Connected(handle:)), effect.none())
+    }
+    Model(connection: Connected(handle:), ..),
+      ReceivedEvent(event: donut.ReceivedMessage(handle: event_handle, message:))
+      if handle == event_handle
+    -> {
+      let entry = Received(websocket_message_to_string(message))
+      let history = [entry, ..model.history]
+      #(Model(..model, history:), scroll_to_bottom_of_history())
+    }
+    model, ReceivedEvent(event: donut.Errored(handle: event_handle)) -> {
+      case model.connection {
+        Connected(handle:) | Disconnecting(handle:) if handle == event_handle -> #(
+          Model(..model, connection: Faulted),
+          effect.none(),
+        )
+        _ -> #(model, effect.none())
+      }
+    }
+    model, ReceivedEvent(event: donut.Closed(handle: event_handle, code:)) -> {
+      case model.connection {
+        Connected(handle:) | Disconnecting(handle:) if handle == event_handle ->
           case code {
             donut.Normal -> {
               #(Model(..model, connection: Disconnected), effect.none())
@@ -72,7 +86,9 @@ pub fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
               #(model, effect)
             }
           }
+        _ -> #(model, effect.none())
       }
+    }
     Model(connection: Connected(handle:), ..), UserRequestedSend(message:) -> {
       let content = websocket_message_to_string(message)
       case content {
@@ -84,18 +100,25 @@ pub fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
             donut.send(handle, message),
             scroll_to_bottom_of_history(),
           ]
-          #(Model(..model, history:), effect.batch(effects))
+          // need to clear out message box if sent successfully
+          #(Model(..model, history:, draft: ""), effect.batch(effects))
         }
       }
     }
     Model(connection: Disconnected, ..), UserRequestedConnect -> {
-      #(model, donut.init(server_url, ReceivedEvent))
+      #(
+        Model(..model, connection: Connecting),
+        donut.init(server_url, ReceivedEvent),
+      )
     }
     Model(connection: Connected(handle:), ..), UserRequestedDisconnect -> {
-      #(Model(..model, connection: Disconnecting), donut.close(handle))
+      #(Model(..model, connection: Disconnecting(handle:)), donut.close(handle))
     }
     model, UserUpdatedMessageBox(content:) -> {
       #(Model(..model, draft: content), effect.none())
+    }
+    model, UserRequestedClearHistory -> {
+      #(Model(..model, history: []), effect.none())
     }
     model, _ -> #(model, effect.none())
   }
@@ -129,7 +152,7 @@ pub fn view(model: Model) -> Element(Message) {
     ],
     [
       html.div([attribute.class("w-full max-w-md")], [
-        connection_buttons_view(model.connection),
+        controls_bar_view(model.connection, model.history),
       ]),
       html.div(
         [
@@ -237,7 +260,10 @@ fn message_box_view(
   html.div([attribute.class("bg-white rounded-2xl shadow-md p-6")], [form])
 }
 
-fn connection_buttons_view(connection: ConnectionState) -> Element(Message) {
+fn controls_bar_view(
+  connection: ConnectionState,
+  history: List(HistoryEntry),
+) -> Element(Message) {
   html.div(
     [
       attribute.class(
@@ -252,7 +278,7 @@ fn connection_buttons_view(connection: ConnectionState) -> Element(Message) {
             Disconnected | Faulted -> False
             _ -> True
           }),
-          attribute.class(button_classes <> " w-1/2"),
+          attribute.class(button_classes <> " flex-1"),
         ],
         [html.text("Connect")],
       ),
@@ -263,10 +289,43 @@ fn connection_buttons_view(connection: ConnectionState) -> Element(Message) {
             Connected(_) -> False
             _ -> True
           }),
-          attribute.class(button_classes <> " w-1/2"),
+          attribute.class(button_classes <> " flex-1"),
         ],
         [html.text("Disconnect")],
       ),
+      html.button(
+        [
+          event.on_click(UserRequestedClearHistory),
+          attribute.disabled(list.is_empty(history)),
+          attribute.class(button_classes),
+        ],
+        [trashcan_svg()],
+      ),
+    ],
+  )
+}
+
+fn trashcan_svg() -> Element(Message) {
+  html.svg(
+    [
+      attribute.class("lucide lucide-trash-icon lucide-trash"),
+      attribute.attribute("stroke-linejoin", "round"),
+      attribute.attribute("stroke-linecap", "round"),
+      attribute.attribute("stroke-width", "2"),
+      attribute.attribute("stroke", "white"),
+      attribute.attribute("fill", "none"),
+      attribute.attribute("viewBox", "0 0 24 24"),
+      attribute.height(24),
+      attribute.width(24),
+    ],
+    [
+      svg.path([
+        attribute.attribute("d", "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"),
+      ]),
+      svg.path([attribute.attribute("d", "M3 6h18")]),
+      svg.path([
+        attribute.attribute("d", "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"),
+      ]),
     ],
   )
 }
