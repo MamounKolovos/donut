@@ -81,6 +81,7 @@ pub fn stale_handle_test() {
     )
 
   let assert echo_client.Model(
+    connection: echo_client.Disconnected,
     history: [
       echo_client.Received("new hello"),
       echo_client.Sent("new hello"),
