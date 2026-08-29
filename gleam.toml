@@ -2,16 +2,13 @@ name = "donut"
 version = "1.0.0"
 target = "javascript"
 
-# Fill out these fields if you intend to generate HTML documentation or publish
-# your project to the Hex package manager.
-#
-# description = ""
-# licences = ["Apache-2.0"]
-# repository = { type = "github", user = "", repo = "" }
-# links = [{ title = "Website", href = "" }]
-#
-# For a full reference of all the available options, you can have a look at
-# https://gleam.run/writing-gleam/gleam-toml/.
+description = "An elegant Lustre package for interacting with and simulating websockets."
+licenses = ["MIT"]
+repository = { type = "github", user = "MamounKolovos", repo = "donut" }
+
+links = [
+  { title = "Lustre", href = "https://hexdocs.pm/lustre/" },
+]
 
 [dependencies]
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"

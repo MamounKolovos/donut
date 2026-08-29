@@ -1,3 +1,74 @@
+//// <script>
+//// // Credit to vshakitskiy for the script
+//// const docs = [
+////   {
+////     header: "Connection",
+////     functions: [
+////       "close",
+////       "init",
+////       "send",
+////     ]
+////   },
+////   {
+////     header: "Testing",
+////     functions: ["test_handle",]
+////   },
+//// ]
+////
+//// const callback = () => {
+////   const list = document.querySelector(".sidebar > ul:last-of-type")
+////   const sortedLists = document.createDocumentFragment()
+////   const sortedMembers = document.createDocumentFragment()
+////
+////   for (const section of docs) {
+////     sortedLists.append((() => {
+////       const node = document.createElement("h3")
+////       node.append(section.header)
+////       return node
+////     })())
+////     sortedMembers.append((() => {
+////       const node = document.createElement("h2")
+////       node.append(section.header)
+////       return node
+////     })())
+////
+////     const sortedList = document.createElement("ul")
+////     sortedLists.append(sortedList)
+////
+////     const sortedFunctions = [...section.functions].sort()
+////
+////     for (const funcName of sortedFunctions) {
+////       const href = `#${funcName}`
+////       const member = document.querySelector(
+////         `.member:has(h2 > a[href="${href}"])`
+////       )
+////       const sidebar = list.querySelector(`li:has(a[href="${href}"])`)
+////       sortedList.append(sidebar)
+////       sortedMembers.append(member)
+////     }
+////   }
+////
+////   document.querySelector(".sidebar").insertBefore(sortedLists, list)
+////   document
+////     .querySelector(".module-members:has(#module-values)")
+////     .insertBefore(
+////       sortedMembers,
+////       document.querySelector("#module-values").nextSibling
+////     )
+//// }
+////
+//// document.readyState !== "loading"
+////   ? callback()
+////   : document.addEventListener(
+////     "DOMContentLoaded",
+////     callback,
+////     { once: true }
+////   )
+//// </script>
+//// 
+//// Donut helps you talk to websockets from your Lustre application. Connection events become messages you already know how to respond to.
+//// It's designed to integrate seamlessly with Lustre's simulate module, so you can test that logic without a real connection.
+
 import lustre/dev/simulate.{type Simulation}
 import lustre/effect.{type Effect}
 
